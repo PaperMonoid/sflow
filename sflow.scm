@@ -311,3 +311,60 @@
   (define (update values value)
     (cons value values))
   (reverse (sflow/foldl '() update stream)))
+
+
+;; sflow/box-muller-transform : real real real real -> (list real)
+;; Takes a mean value, a standard deviation and two samples
+;; from a uniform distribution and transforms them into normal
+;; distributed values.
+(define (sflow/box-muller-transform mu sigma u1 u2)
+  (let ((magnitude (* sigma (sqrt (* -2 (log u1)))))
+	(pi (* 4 (atan 1))))
+    (list
+     (+ (* magnitude (cos (* 2 pi u2))) mu)
+     (+ (* magnitude (sin (* 2 pi u2))) mu))))
+
+
+;; sflow/make-rng-uniform : integer -> () -> real
+;; Takes a seed and returns a pseudorandom number generator
+;; which uses the linear congruential generator (LCG) method
+;; with POSIX parameters.
+(define (sflow/make-rng-uniform seed)
+  (let ((a 25214903917)
+	(c 11)
+	(m (expt 2 48))
+	(x seed))
+    (lambda ()
+      (begin
+	(set! x (mod (+ (* a x) c) m))
+	(inexact (/ x m))))))
+
+
+;; sflow/make-rng-normal : integer real real -> () -> real
+;; Takes a seed, mean, and standard deviation values and returns
+;; a pseudorandom normal number generator using the box muller
+;; transform method.
+(define (sflow/make-rng-normal seed mu sigma)
+  (let ((rng (sflow/make-rng-uniform seed)) (z '()))
+    (lambda ()
+      (begin
+	(when (null? z)
+	  (set! z (sflow/box-muller-transform mu sigma (rng) (rng))))
+	(let ((z0 (car z)) (z1 (cdr z)))
+	  (begin (set! z z1) z0))))))
+
+
+;; sflow/pseudorandom : integer -> stream
+;; Takes a seed and returns a stream of pseudorandom uniformly
+;; ditributed numbers.
+(define (sflow/pseudorandom seed)
+  (let ((rng (make-rng-uniform seed)))
+    (sflow/make-stream rng)))
+
+
+;; sflow/pseudorandom-normal : integer -> stream
+;; Takes a seed and returns a stream of pseudorandom normally
+;; ditributed numbers.
+(define (sflow/pseudorandom-normal seed)
+  (let ((rng (make-rng-normal seed)))
+    (sflow/make-stream rng)))
